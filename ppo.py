@@ -14,8 +14,9 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 import gym_snakegame
-from gymnasium.wrappers import TransformObservation
-from gymnasium.experimental.wrappers import ReshapeObservationV0, RecordVideoV0
+from gymnasium.wrappers import TransformObservation, TimeLimit
+from gym_snakegame.wrappers import RewardConverter
+from gymnasium.experimental.wrappers import ReshapeObservationV0, RecordVideoV0, LambdaRewardV0
 from tqdm import tqdm
 
 
@@ -36,7 +37,7 @@ def parse_args():
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
@@ -46,11 +47,11 @@ def parse_args():
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=6,
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=False,
         help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -76,11 +77,11 @@ def parse_args():
         help="the target KL divergence threshold")
     
     # track interval
-    parser.add_argument("--log-charts-interval", type=int, default=1000,
+    parser.add_argument("--log-charts-interval", type=int, default=10,
         help="Record interval for chart")
     parser.add_argument("--log-losses-interval", type=int, default=10,
         help="Record interval for losses")
-    parser.add_argument("--record-interval", type=int, default=1000,
+    parser.add_argument("--record-interval", type=int, default=200,
         help="Record interval for RecordVideo")
 
     args = parser.parse_args()
@@ -93,8 +94,11 @@ def parse_args():
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         env = gym.make(env_id, render_mode="rgb_array", size=15, n_target=1)
+        env = TimeLimit(env, 10000)
+        env = LambdaRewardV0(env, lambda r: r * 10.0)
         env = ReshapeObservationV0(env, (1, env.size, env.size))
         env = TransformObservation(env, lambda obs: obs / 5.0)
+        env = RewardConverter(env, -0.001)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
