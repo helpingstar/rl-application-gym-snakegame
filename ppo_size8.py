@@ -33,11 +33,11 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="gym_snakegame_size15",
+    parser.add_argument("--wandb-project-name", type=str, default="gym_snakegame_size8",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
@@ -84,6 +84,9 @@ def parse_args():
     parser.add_argument("--record-interval", type=int, default=2000,
         help="Record interval for RecordVideo")
 
+    parser.add_argument("--load-model", type=str, default="",
+        help="whether to load model `runs/{run_name}` folder")
+
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -93,9 +96,9 @@ def parse_args():
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
-        env = gym.make(env_id, render_mode=None, board_size=15, n_target=1)
+        env = gym.make(env_id, render_mode='rgb_array', board_size=8, n_target=1)
         
-        env = TimeLimit(env, 10000)
+        env = TimeLimit(env, 5000)
         env = ReshapeObservationV0(env, (1, env.board_size, env.board_size))
         env = TransformObservation(env, lambda obs: obs / 5.0)
         env = RewardConverter(env, -0.01)
@@ -121,14 +124,12 @@ class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(1, 16, 5)),
+            layer_init(nn.Conv2d(1, 16, 3)),
             nn.ReLU(),
             layer_init(nn.Conv2d(16, 32, 3)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 3)),
-            nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            layer_init(nn.Linear(32 * 4 * 4, 512)),
             nn.ReLU(),
         )
         self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
@@ -183,9 +184,12 @@ if __name__ == "__main__":
         [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
-
+    
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
+    if args.load_model:
+        agent.load_state_dict(torch.load(f'runs/{args.load_model}'))
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
