@@ -42,7 +42,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="gym_snakegame/SnakeGame-v0",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=200000000,
+    parser.add_argument("--total-timesteps", type=int, default=60000000,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
@@ -385,6 +385,10 @@ if __name__ == "__main__":
             losses_count = 1
         else:
             losses_count += 1
+
+    model_path = f"runs/{run_name}/cleanrl_{args.exp_name}.pt"
+    torch.save(agent.state_dict(), model_path)
+    print(f"model saved to {model_path}")
 
     envs.close()
     writer.close()
