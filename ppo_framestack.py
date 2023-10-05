@@ -126,14 +126,14 @@ class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(16, 32, 5)),
+            layer_init(nn.Conv2d(args.num_frame_stack, 96, 5)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 3)),
+            layer_init(nn.Conv2d(96, 128, 5)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3)),
+            layer_init(nn.Conv2d(128, 128, 3)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            layer_init(nn.Linear(128 * 5 * 5, 512)),
             nn.ReLU(),
         )
         self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
