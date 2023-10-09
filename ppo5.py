@@ -14,9 +14,8 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 import gym_snakegame
-from gymnasium.wrappers import TransformObservation, TimeLimit
 from gym_snakegame.wrappers import RewardConverter
-from gymnasium.experimental.wrappers import ReshapeObservationV0, RecordVideoV0, LambdaRewardV0, FrameStackObservationV0
+from gymnasium.experimental.wrappers import ReshapeObservationV0, LambdaObservationV0, DtypeObservationV0, LambdaObservationV0
 from tqdm import tqdm
 
 
@@ -43,7 +42,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="gym_snakegame/SnakeGame-v0",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=200000000,
+    parser.add_argument("--total-timesteps", type=int, default=1000000000,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
@@ -77,16 +76,12 @@ def parse_args():
         help="the target KL divergence threshold")
     
     # track interval
-    parser.add_argument("--log-charts-interval", type=int, default=100,
+    parser.add_argument("--log-charts-interval", type=int, default=500,
         help="Record interval for chart")
     parser.add_argument("--log-losses-interval", type=int, default=100,
         help="Record interval for losses")
     parser.add_argument("--record-interval", type=int, default=2000,
         help="Record interval for RecordVideo")
-    parser.add_argument("--frame-stack", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="whether to stack frames")
-    parser.add_argument("--num-frame-stack", type=int, default=4,
-        help="whether to stack frames")
 
     parser.add_argument("--load-model", type=str, default="",
         help="whether to load model `runs/{run_name}` folder")
@@ -106,21 +101,20 @@ def parse_args():
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
-        
         if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode='rgb_array', board_size=args.board_size, n_target=args.n_target)
+            env = gym.make(env_id, render_mode="rgb_array")
         else:
-            env = gym.make(env_id, render_mode=None, board_size=args.board_size, n_target=args.n_target)
-        env = TimeLimit(env, 10000)
-        env = TransformObservation(env, lambda obs: obs / 5.0)
+            env = gym.make(env_id)
+        
+        env = ReshapeObservationV0(env, (1, 15, 15))
+        env = DtypeObservationV0(env, np.float32)
+        env = LambdaObservationV0(env, lambda obs: obs / env.ITEM, observation_space=gym.spaces.Box(0, 1, shape=(1, env.board_size, env.board_size), dtype=np.float32))
         env = RewardConverter(env, -0.01)
 
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
-                env = gym.experimental.wrappers.RecordVideoV0(env, f"videos/{run_name}", episode_trigger=lambda x: (x % args.record_interval == 0), disable_logger=True, fps=10)
-        if args.frame_stack:
-            env = FrameStackObservationV0(env, args.num_frame_stack)
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", episode_trigger=lambda x: (x % args.record_interval == 0), disable_logger=True)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
         return env
@@ -138,14 +132,14 @@ class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(args.num_frame_stack, 128, 3)),
+            layer_init(nn.Conv2d(1, 32, 5)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(128, 256, 3)),
+            layer_init(nn.Conv2d(32, 64, 3)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(256, 256, 3)),
+            layer_init(nn.Conv2d(64, 64, 3)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(256 * 2 * 2, 512)),
+            layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
         self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
@@ -363,10 +357,10 @@ if __name__ == "__main__":
         else:
             losses_count += 1
 
-
-    model_path = f"runs/{run_name}/cleanrl_{args.exp_name}.pt"
-    torch.save(agent.state_dict(), model_path)
-    print(f"model saved to {model_path}")
+        if update % (num_updates // 20) == 0:
+            model_path = f"runs/{run_name}/cleanrl_{args.exp_name}_{update}.pt"
+            torch.save(agent.state_dict(), model_path)
+            print(f"model saved to {model_path}")
 
     envs.close()
     writer.close()
