@@ -1,6 +1,7 @@
 import gym_snakegame
 import gymnasium as gym
 import numpy as np
+
 # env = gym.make('gym_snakegame/SnakeGame-v0', board_size=5, n_target=1, render_mode='human')
 env = gym.make("MountainCar-v0")
 print(env.observation_space)
