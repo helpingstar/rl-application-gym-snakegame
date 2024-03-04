@@ -15,8 +15,15 @@ from torch.utils.tensorboard import SummaryWriter
 
 import gym_snakegame
 from gym_snakegame.wrappers import RewardConverter
-from gymnasium.experimental.wrappers import ReshapeObservationV0, LambdaObservationV0, DtypeObservationV0, LambdaObservationV0, LambdaRewardV0
+from gymnasium.experimental.wrappers import (
+    ReshapeObservationV0,
+    LambdaObservationV0,
+    DtypeObservationV0,
+    LambdaObservationV0,
+    LambdaRewardV0,
+)
 from tqdm import tqdm
+
 
 @dataclass
 class Args:
@@ -44,11 +51,11 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 16
+    num_envs: int = 32
     """the number of parallel game environments"""
-    num_steps: int = 256
+    num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -81,7 +88,6 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-        
     # track interval
     log_charts_interval: int = 500
     """Record interval for chart"""
@@ -101,11 +107,12 @@ class Args:
     n_channel: int = 4
     """number of channel"""
 
-    # reward 
+    # reward
     blank_reward: float = -0.01
     """The reward for reaching an empty space."""
     reward_scale: float = 1
     """Size of reward for dying or getting an item"""
+
 
 def make_env(env_id, idx, capture_video, run_name):
     def thunk():
@@ -121,7 +128,12 @@ def make_env(env_id, idx, capture_video, run_name):
 
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", episode_trigger=lambda x: (x % args.record_interval == 0), disable_logger=True)
+            env = gym.wrappers.RecordVideo(
+                env,
+                f"videos/{run_name}",
+                episode_trigger=lambda x: (x % args.record_interval == 0),
+                disable_logger=True,
+            )
 
         return env
 
@@ -198,14 +210,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
     if args.load_model:
-        agent.load_state_dict(torch.load(f'weights/{args.load_model}'))
+        agent.load_state_dict(torch.load(f"weights/{args.load_model}"))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -293,7 +305,9 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
+                    b_obs[mb_inds], b_actions.long()[mb_inds]
+                )
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
