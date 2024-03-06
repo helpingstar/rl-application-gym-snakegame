@@ -15,13 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import gym_snakegame
 from gym_snakegame.wrappers import RewardConverter
-from gymnasium.experimental.wrappers import (
-    ReshapeObservationV0,
-    LambdaObservationV0,
-    DtypeObservationV0,
-    LambdaObservationV0,
-    LambdaRewardV0,
-)
+from gymnasium.wrappers import DtypeObservation, TransformObservation
 from tqdm import tqdm
 
 
@@ -118,23 +112,20 @@ def make_env(env_id, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, board_size=args.board_size, n_channel=args.n_channel, render_mode="rgb_array")
-        else:
-            env = gym.make(env_id, board_size=args.board_size, n_channel=args.n_channel)
-
-        env = DtypeObservationV0(env, np.float32)
-        env = LambdaObservationV0(env, lambda obs: obs / env.unwrapped.ITEM, env.observation_space)
-        env = LambdaRewardV0(env, lambda r: r * args.reward_scale)
-        env = RewardConverter(env, args.blank_reward)
-
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(
                 env,
                 f"videos/{run_name}",
                 episode_trigger=lambda x: (x % args.record_interval == 0),
                 disable_logger=True,
             )
+        else:
+            env = gym.make(env_id, board_size=args.board_size, n_channel=args.n_channel)
 
+        env = DtypeObservation(env, np.float32)
+        env = TransformObservation(env, lambda obs: obs / env.unwrapped.ITEM, env.observation_space)
+        env = RewardConverter(env, args.blank_reward)
+
+        env = gym.wrappers.RecordEpisodeStatistics(env)
         return env
 
     return thunk
