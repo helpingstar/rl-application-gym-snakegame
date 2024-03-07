@@ -251,14 +251,14 @@ if __name__ == "__main__":
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
 
-            if "final_info" in infos:
-                for info in infos["final_info"]:
-                    if info and "episode" in info:
+            if "episode" in infos:
+                for i, b in enumerate(infos["episode"]["_r"]):
+                    if b:
                         if charts_count % args.log_charts_interval == 0:
                             # print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-                            writer.add_scalar("charts/snake_length", info["snake_length"], global_step)
+                            writer.add_scalar("charts/episodic_return", infos["episode"]["r"][i], global_step)
+                            writer.add_scalar("charts/episodic_length", infos["episode"]["l"][i], global_step)
+                            writer.add_scalar("charts/snake_length", infos["snake_length"][i], global_step)
                             charts_count = 1
                         else:
                             charts_count += 1
