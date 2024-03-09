@@ -15,8 +15,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 import gym_snakegame
 from gym_snakegame.wrappers import RewardConverter
-from gymnasium.wrappers import DtypeObservation, TransformObservation
+from gymnasium.wrappers import DtypeObservation, TransformObservation, TransformReward
 from tqdm import tqdm
+from gymnasium.spaces import Box
 
 
 @dataclass
@@ -45,7 +46,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 32
+    num_envs: int = 64
     """the number of parallel game environments"""
     num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
@@ -89,7 +90,10 @@ class Args:
     """Record interval for losses"""
     record_interval: int = 5000
     """Record interval for RecordVideo"""
-
+    record_step_interval: int = 0
+    """Record step interval for RecordVideo"""
+    record_step_length: int = 1000
+    """Record step length for RecordVideo"""
     load_model: str = ""
     """whether to load model `runs/{run_name}` folder"""
 
@@ -118,11 +122,23 @@ def make_env(env_id, idx, capture_video, run_name):
                 episode_trigger=lambda x: (x % args.record_interval == 0),
                 disable_logger=True,
             )
+            env = gym.wrappers.RecordVideo(
+                env,
+                f"videos/{run_name}",
+                step_trigger=lambda x: (x % args.record_step_interval == 0),
+                video_length=args.record_step_length,
+                disable_logger=True,
+            )
         else:
             env = gym.make(env_id, board_size=args.board_size, n_channel=args.n_channel)
 
         env = DtypeObservation(env, np.float32)
-        env = TransformObservation(env, lambda obs: obs / env.unwrapped.ITEM, env.observation_space)
+        env = TransformObservation(
+            env,
+            lambda obs: obs / env.unwrapped.ITEM,
+            Box(0, 1, (args.n_channel, args.board_size, args.board_size), dtype=np.float32),
+        )
+        env = TransformReward(env, lambda r: r * args.reward_scale)
         env = RewardConverter(env, args.blank_reward)
 
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -173,6 +189,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    args.record_step_interval = args.total_timesteps // args.num_envs // 100
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
@@ -183,7 +200,7 @@ if __name__ == "__main__":
             sync_tensorboard=True,
             config=vars(args),
             name=run_name,
-            monitor_gym=True,
+            # monitor_gym=True,
             save_code=True,
         )
     writer = SummaryWriter(f"runs/{run_name}")
