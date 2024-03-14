@@ -36,7 +36,7 @@ class Args:
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = True
+    capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
@@ -46,7 +46,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 64
+    num_envs: int = 32
     """the number of parallel game environments"""
     num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
@@ -86,7 +86,7 @@ class Args:
     # track interval
     log_charts_interval: int = 500
     """Record interval for chart"""
-    log_losses_interval: int = 100
+    log_losses_interval: int = 10
     """Record interval for losses"""
     record_interval: int = 5000
     """Record interval for RecordVideo"""
